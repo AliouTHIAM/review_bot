@@ -154,29 +154,33 @@ jobs:
           GRADE=$(echo "$CODACY_STATS" | jq -r '.data.grade // "N/A"')
           ISSUES_COUNT=$(echo "$CODACY_STATS" | jq -r '.data.issuesCount // 0')
 
-          SUMMARY="# 📋 Code Analysis Summary
+          # Créer le fichier de résumé avec une approche différente
+          cat > analysis_summary.md << EOL
+          # 📋 Code Analysis Summary
 
-## Analysis Results
-**Custom Linter**: Analysis completed  
-**Codacy**: Grade **${GRADE}** with **${ISSUES_COUNT}** issues detected
+          ## Analysis Results
+          **Custom Linter**: Analysis completed  
+          **Codacy**: Grade **${GRADE}** with **${ISSUES_COUNT}** issues detected
 
-## Changed Files Analyzed
-"
+          ## Changed Files Analyzed
+          EOL
+          
+          # Ajouter les fichiers modifiés
           for FILE in $CHANGED_FILES; do
-            SUMMARY="${SUMMARY}
-- \`${FILE}\`"
+            echo "- \`${FILE}\`" >> analysis_summary.md
           done
+          
+          # Ajouter la fin du résumé
+          cat >> analysis_summary.md << EOL
 
-          SUMMARY="${SUMMARY}
+          See inline comments for detailed feedback from both analyzers.
 
-See inline comments for detailed feedback from both analyzers.
-
-*Automated analysis performed on commit \`${COMMIT_ID:0:8}\`*"
-
-          echo "$SUMMARY" > analysis_summary.md
+          *Automated analysis performed on commit \`${COMMIT_ID:0:8}\`*
+          EOL
 
       - name: Add summary comment to PR
         uses: thollander/actions-comment-pull-request@v2
         with:
           filePath: analysis_summary.md
           comment_tag: code-analysis-summary
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
