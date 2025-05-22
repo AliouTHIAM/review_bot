@@ -196,14 +196,16 @@ jobs:
           ISSUES_COUNT=$(echo "$CODACY_STATS" | jq -r '.data.issuesCount // 0')
           
           # Créer le résumé
-          SUMMARY="# 📋 Code Analysis Summary
+          SUMMARY=$(cat <<EOF
+# 📋 Code Analysis Summary
 
 ## Analysis Results
- **Custom Linter**: Analysis completed
- **Codacy**: Grade **${GRADE}** with **${ISSUES_COUNT}** issues detected
+**Custom Linter**: Analysis completed
+**Codacy**: Grade **${GRADE}** with **${ISSUES_COUNT}** issues detected
 
 ## Changed Files Analyzed
-"
+EOF
+)
 # Ajouter la liste des fichiers analysés
 for FILE in $CHANGED_FILES; do
 SUMMARY="${SUMMARY}
