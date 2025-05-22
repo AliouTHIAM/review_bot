@@ -57,7 +57,7 @@ jobs:
                   MESSAGE=$(echo "$ISSUES" | jq -r ".[$i].message")
                   TYPE=$(echo "$ISSUES" | jq -r ".[$i].type")
                   SOURCE=$(echo "$ISSUES" | jq -r ".[$i].source")
-                  COMMENT_BODY="**🔧 Linter - $TYPE** from $SOURCE: $MESSAGE"
+                  COMMENT_BODY="**Linter - $TYPE** from $SOURCE: $MESSAGE"
 
                   curl -s -X POST \
                     -H "Authorization: token $GITHUB_TOKEN" \
@@ -150,7 +150,7 @@ jobs:
               echo "Checking if $FILENAME is in changed files..."
               if echo "$CHANGED_FILES" | grep -q "$FILENAME"; then
                 echo "Posting comment for $FILENAME:$LINE"
-                COMMENT_BODY="**📊 Codacy Analysis - ${LEVEL} ${CATEGORY}**\n\n${MESSAGE}\n\n*Pattern*: \`${PATTERN_ID}\`"
+                COMMENT_BODY="**Codacy Analysis - ${LEVEL} ${CATEGORY}**\n\n${MESSAGE}\n\n*Pattern*: \`${PATTERN_ID}\`"
 
                 curl -s -X POST \
                   -H "Authorization: token $GITHUB_TOKEN" \
@@ -192,11 +192,11 @@ jobs:
 
           # Créer le fichier de résumé
           cat > analysis_summary.md << EOL
-          # 📋 Code Analysis Summary
+          # Code Analysis Summary
 
           ## Analysis Results
-          - 🔧 **Custom Linter**: Analysis completed  
-          - 📊 **Codacy**: Grade **${GRADE}** with **${ISSUES_COUNT}** total issues
+          - **Custom Linter**: Analysis completed  
+          - **Codacy**: Grade **${GRADE}** with **${ISSUES_COUNT}** total issues
 
           ## Changed Files Analyzed
           EOL
@@ -211,7 +211,7 @@ jobs:
 
           See inline comments for detailed feedback from both analyzers.
 
-          💡 **Note**: Only issues in changed files are commented inline.
+          **Note**: Only issues in changed files are commented inline.
 
           *Automated analysis performed on commit \`${COMMIT_ID:0:8}\`*
           EOL
