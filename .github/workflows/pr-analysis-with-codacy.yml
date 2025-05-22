@@ -80,6 +80,9 @@ jobs:
           project-token: ${{ secrets.CODACY_PROJECT_TOKEN }}
           upload: true
           max-allowed-issues: 2147483647
+          tool: eslint,bandit,pylint,rubocop
+          format: json
+        continue-on-error: true
 
       - name: Fetch Codacy analysis results and post comments
         env:
