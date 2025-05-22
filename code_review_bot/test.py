@@ -44,6 +44,10 @@ def example_function(a, b):
 
     return result
 
+def flawed_function(data=[], retries=3):  # noqa: B006
+    data.append("corruption")  # Modifying default list (Codacy will flag)
+    print(data)
+
 # Calling function with incorrect arguments to cause an error
 example_function("string", 5)
 
