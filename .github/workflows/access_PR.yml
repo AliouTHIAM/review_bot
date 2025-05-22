@@ -1,4 +1,4 @@
-name: PR File Analysis
+name: PR File Analysis with Codacy
 on:
   pull_request:
     types: [opened, synchronize]
@@ -25,21 +25,21 @@ jobs:
           echo "$CHANGED_FILES" >> $GITHUB_ENV
           echo "EOF" >> $GITHUB_ENV
       
-      - name: Analyze files and post review comments
+      - name: Analyze files with your custom linter API
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          API_URL="https://bb33-41-82-199-251.ngrok-free.app/analyze/code"
+          API_URL="https://fee6-154-124-182-81.ngrok-free.app/analyze/code"
           PR_NUMBER=${{ github.event.pull_request.number }}
           REPO="${GITHUB_REPOSITORY}"
           COMMIT_ID=$(gh pr view $PR_NUMBER --json commits --jq '.commits[-1].oid')
           
           echo "Latest commit ID: $COMMIT_ID"
           
-          # Process each file individually
+          # Process each file individually with your existing API
           for FILE in $CHANGED_FILES; do
             if [ -f "$FILE" ]; then
-              echo "Processing file: $FILE"
+              echo "Processing file with custom linter: $FILE"
               # Get file content and escape properly for JSON
               FILE_CONTENT=$(cat "$FILE" | jq -Rs .)
               # Create JSON payload for this file
@@ -71,9 +71,9 @@ jobs:
                   SOURCE=$(echo "$ISSUES" | jq -r ".[$i].source")
                   
                   # Create the review comment using the GitHub REST API
-                  COMMENT_BODY="**$TYPE** from $SOURCE: $MESSAGE"
+                  COMMENT_BODY="**🔧 Linter - $TYPE** from $SOURCE: $MESSAGE"
                   
-                  echo "Adding comment at $FILE:$LINE - $COMMENT_BODY"
+                  echo "Adding linter comment at $FILE:$LINE - $COMMENT_BODY"
                   
                   # Use GitHub REST API to post the review comment
                   curl -s -X POST \
@@ -88,22 +88,140 @@ jobs:
                     }"
                 done
               else
-                # No issues detected, add a general comment
-                echo "No specific issues found for $FILE"
+                echo "No specific linter issues found for $FILE"
               fi
               
               echo "-----------------------------------"
             fi
           done
+
+      # NOUVELLE SECTION: Analyse avec Codacy
+      - name: Run Codacy Analysis CLI
+        uses: codacy/codacy-analysis-cli-action@master
+        with:
+          project-token: ${{ secrets.CODACY_PROJECT_TOKEN }}
+          upload: true
+          max-allowed-issues: 2147483647
           
-      - name: Add summary comment with overall analysis
+      - name: Fetch Codacy analysis results and post comments
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CODACY_API_TOKEN: ${{ secrets.CODACY_API_TOKEN }}
+          CODACY_PROJECT_TOKEN: ${{ secrets.CODACY_PROJECT_TOKEN }}
+        run: |
+          PR_NUMBER=${{ github.event.pull_request.number }}
+          REPO="${GITHUB_REPOSITORY}"
+          COMMIT_ID=$(gh pr view $PR_NUMBER --json commits --jq '.commits[-1].oid')
+          
+          # Organisation et nom du repo
+          ORG_NAME=$(echo $REPO | cut -d'/' -f1)
+          REPO_NAME=$(echo $REPO | cut -d'/' -f2)
+          
+          echo "Fetching Codacy analysis results..."
+          
+          # Attendre un peu que Codacy traite l'analyse
+          sleep 30
+          
+          # Récupérer les issues Codacy pour le commit actuel
+          CODACY_RESPONSE=$(curl -s -X GET \
+            "https://app.codacy.com/api/v3/analysis/organizations/$ORG_NAME/repositories/$REPO_NAME/commits/$COMMIT_ID/issues" \
+            -H "Accept: application/json" \
+            -H "api-token: $CODACY_API_TOKEN")
+            
+          echo "Codacy API Response:"
+          echo "$CODACY_RESPONSE"
+          
+          # Vérifier si la réponse contient des données
+          if [[ $(echo "$CODACY_RESPONSE" | jq -r '.data') != "null" ]]; then
+            # Traiter chaque issue Codacy
+            echo "$CODACY_RESPONSE" | jq -r '.data[]' | while IFS= read -r issue; do
+              FILENAME=$(echo "$issue" | jq -r '.filename')
+              LINE=$(echo "$issue" | jq -r '.line')
+              MESSAGE=$(echo "$issue" | jq -r '.message')
+              PATTERN_ID=$(echo "$issue" | jq -r '.patternId')
+              CATEGORY=$(echo "$issue" | jq -r '.category')
+              LEVEL=$(echo "$issue" | jq -r '.level')
+              
+              # Vérifier si le fichier fait partie des fichiers modifiés
+              if echo "$CHANGED_FILES" | grep -q "$FILENAME"; then
+                # Créer le commentaire
+                COMMENT_BODY="**📊 Codacy Analysis - ${LEVEL} ${CATEGORY}**\n\n${MESSAGE}\n\n*Pattern*: \`${PATTERN_ID}\`"
+                
+                echo "Adding Codacy comment at $FILENAME:$LINE"
+                
+                # Poster le commentaire sur la PR
+                curl -s -X POST \
+                  -H "Authorization: token $GITHUB_TOKEN" \
+                  -H "Accept: application/vnd.github.v3+json" \
+                  "https://api.github.com/repos/$REPO/pulls/$PR_NUMBER/comments" \
+                  -d "{
+                    \"body\": \"$COMMENT_BODY\",
+                    \"commit_id\": \"$COMMIT_ID\",
+                    \"path\": \"$FILENAME\",
+                    \"line\": $LINE
+                  }"
+              fi
+            done
+          else
+            echo "No Codacy issues found or unable to fetch results"
+          fi
+
+      # Alternative: Utiliser l'action Codacy Coverage Reporter
+      - name: Run Codacy Coverage Reporter
+        uses: codacy/codacy-coverage-reporter-action@v1
+        with:
+          project-token: ${{ secrets.CODACY_PROJECT_TOKEN }}
+          coverage-reports: coverage.xml # Si vous avez des rapports de couverture
+        continue-on-error: true
+
+      - name: Create consolidated analysis summary
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CODACY_API_TOKEN: ${{ secrets.CODACY_API_TOKEN }}
+        run: |
+          PR_NUMBER=${{ github.event.pull_request.number }}
+          REPO="${GITHUB_REPOSITORY}"
+          ORG_NAME=$(echo $REPO | cut -d'/' -f1)
+          REPO_NAME=$(echo $REPO | cut -d'/' -f2)
+          COMMIT_ID=$(gh pr view $PR_NUMBER --json commits --jq '.commits[-1].oid')
+          
+          # Récupérer les statistiques globales de Codacy
+          CODACY_STATS=$(curl -s -X GET \
+            "https://app.codacy.com/api/v3/analysis/organizations/$ORG_NAME/repositories/$REPO_NAME/commits/$COMMIT_ID" \
+            -H "Accept: application/json" \
+            -H "api-token: $CODACY_API_TOKEN")
+          
+          # Extraire les métriques
+          GRADE=$(echo "$CODACY_STATS" | jq -r '.data.grade // "N/A"')
+          ISSUES_COUNT=$(echo "$CODACY_STATS" | jq -r '.data.issuesCount // 0')
+          
+          # Créer le résumé
+          SUMMARY="# 📋 Code Analysis Summary
+
+## Analysis Results
+ **Custom Linter**: Analysis completed
+ **Codacy**: Grade **${GRADE}** with **${ISSUES_COUNT}** issues detected
+
+## Changed Files Analyzed
+"
+# Ajouter la liste des fichiers analysés
+for FILE in $CHANGED_FILES; do
+SUMMARY="${SUMMARY}
+- \`${FILE}\`"
+          done
+          
+          SUMMARY="${SUMMARY}
+
+See inline comments for detailed feedback from both analyzers.
+
+*Automated analysis performed on commit \`${COMMIT_ID:0:8}\`*"
+          
+          # Sauvegarder le résumé dans un fichier
+          echo "$SUMMARY" > analysis_summary.md
+          
+      - name: Add summary comment to PR
         uses: thollander/actions-comment-pull-request@v2
         with:
-          message: |
-            # Code Analysis Summary
-            
-            Analysis completed for all changed files. See inline comments for details.
-            
-            *Automated analysis performed on changed files*
+          filePath: analysis_summary.md
           comment_tag: code-analysis-summary
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
